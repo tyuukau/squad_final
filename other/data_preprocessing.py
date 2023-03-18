@@ -54,10 +54,10 @@ def main():
     print("Creating features from dataset file at {}".format(input_dir))
 
     processor = SquadV2Processor() if version_2_with_negative else SquadV1Processor()
-    for d in ('train', 'test', 'dev'):
+    for d in ('test', 'dev', 'train'):
         evaluate = d != 'train'
-        cached_features_file = '.data/cached_{}'.format(d)
-        examples = processor.get_train_examples(data_dir, filename='{}-v2.0-formatted.json'.format(d))
+        cached_features_file = data_dir + 'cached_{}'.format(d)
+        examples = processor.get_train_examples(data_dir, filename='{}-v2.0-formatted.json'.format(d)) if not evaluate else processor.get_dev_examples(data_dir, filename='{}-v2.0-formatted.json'.format(d))
         
         print(examples)
         
