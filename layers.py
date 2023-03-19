@@ -76,41 +76,43 @@ class Embedding(nn.Module):
         drop_prob (float): Probability of zero-ing out activations
         char_vectors(torch.Tensor): Pre-trained char vectors.
     """
-    def __init__(self, model_name, char_vectors, hidden_size, drop_prob):
+    def __init__(self, model_name, hidden_size, drop_prob):
         super(Embedding, self).__init__()
         size_map = {'albert-base-v2': 768, 'albert-large-v2': 1024, 'albert-xlarge-v2': 2048, 'albert-xxlarge-v2': 4096}
         self.drop_prob = drop_prob
-        self.albert = AlbertModel.from_pretrained(model_name)
-        self.char_embed = nn.Embedding.from_pretrained(char_vectors)
+        self.albert = AlbertModel.from_pretrained(model_name, add_pooling_layer=False)
         self.proj = nn.Linear(size_map[model_name], hidden_size, bias=False)
         self.hwy = HighwayEncoder(2, hidden_size*2+2)
         self.avgatt = AverageAttn(hidden_size)
-        self.cnn = CNN(hidden_size=hidden_size,embed_size=char_vectors.size(1))
-    def forward(self, c, input_ids, attention_mask, token_type_ids):
-        emb, _ = self.albert(input_ids=input_ids,
+        # self.char_embed = nn.Embedding.from_pretrained(char_vectors)
+        # self.cnn = CNN(hidden_size=hidden_size,embed_size=char_vectors.size(1))
+        
+    def forward(self, input_ids, attention_mask, token_type_ids):
+        emb = self.albert(input_ids=input_ids,
                              attention_mask=attention_mask,
                              token_type_ids=token_type_ids
                              )  # (batch_size, seq_len, embed_size)
+        emb = emb[0]
         emb = F.dropout(emb, self.drop_prob, self.training)
         emb = self.proj(emb)  # (batch_size, seq_len, hidden_size)
         emb_avg = self.avgatt(emb) # weighted average word embedding
         emb = torch.cat((emb, emb_avg), dim=2) # concatenate together
 
-        batch_size, sentence_length, max_word_length = c.size()
-        c = c.contiguous().view(-1, max_word_length)     
-        c = self.char_embed(c)
-        c = F.dropout(c, self.drop_prob, self.training)
-        c_emb = self.cnn(c.permute(0, 2, 1), sentence_length, batch_size) 
-        c_emb_avg = self.avgatt(c_emb) # weighted average char embedding
-        c_emb = torch.cat((c_emb, c_emb_avg), dim=2) # concatenate together
+        # batch_size, sentence_length, max_word_length = c.size()
+        # c = c.contiguous().view(-1, max_word_length)     
+        # c = self.char_embed(c)
+        # c = F.dropout(c, self.drop_prob, self.training)
+        # c_emb = self.cnn(c.permute(0, 2, 1), sentence_length, batch_size) 
+        # c_emb_avg = self.avgatt(c_emb) # weighted average char embedding
+        # c_emb = torch.cat((c_emb, c_emb_avg), dim=2) # concatenate together
 #         avg_w = torch.mean(emb, dim=2, keepdim=True)
 #         avg_c = torch.mean(c_emb, dim=2, keepdim=True)
 #         emb = torch.cat((emb, avg_w), 2)
 #         c_emb = torch.cat((c_emb, avg_c), 2)
 
-        concat_emb = torch.cat((c_emb, emb), 2) # concatenate the word embedding with avg WE and char embedding with avg CE
+        # concat_emb = torch.cat((c_emb, emb), 2) # concatenate the word embedding with avg WE and char embedding with avg CE
 
-        emb = self.hwy(concat_emb)   # (batch_size, seq_len, hidden_size)
+        emb = self.hwy(emb)   # (batch_size, seq_len, hidden_size)
 
         return emb
 
@@ -164,8 +166,10 @@ class HighwayEncoder(nn.Module):
 
 class GRUEncoder(nn.Module):
     """General-purpose layer for encoding a sequence using a bidirectional RNN.
+    
     Encoded output is the RNN's hidden state at each position, which
     has shape `(batch_size, seq_len, hidden_size * 2)`.
+    
     Args:
         input_size (int): Size of a single timestep in the input.
         hidden_size (int): Size of the RNN hidden state.
@@ -191,7 +195,7 @@ class GRUEncoder(nn.Module):
         # Sort by length and pack sequence for RNN
         lengths, sort_idx = lengths.sort(0, descending=True)
         x = x[sort_idx]     # (batch_size, seq_len, input_size)
-        x = pack_padded_sequence(x, lengths, batch_first=True)
+        x = pack_padded_sequence(x, lengths.to('cpu'), batch_first=True)
 
         # Apply RNN
         x, _ = self.rnn(x)  # (batch_size, seq_len, 2 * hidden_size)
@@ -237,7 +241,7 @@ class LSTMEncoder(nn.Module):
         # Sort by length and pack sequence for RNN
         lengths, sort_idx = lengths.sort(0, descending=True)
         x = x[sort_idx]     # (batch_size, seq_len, input_size)
-        x = pack_padded_sequence(x, lengths, batch_first=True)
+        x = pack_padded_sequence(x, lengths.to('cpu'), batch_first=True)
 
         # Apply RNN
         x, _ = self.rnn(x)  # (batch_size, seq_len, 2 * hidden_size)
@@ -586,7 +590,7 @@ class RNN(nn.Module):
         # Sort by length and pack sequence for RNN
         lengths, sort_idx = lengths.sort(0, descending=True)
         x = x[sort_idx]     # (batch_size, seq_len, input_size)
-        x = pack_padded_sequence(x, lengths, batch_first=True)
+        x = pack_padded_sequence(x, lengths.to('cpu'), batch_first=True)
 
         # Apply RNN
         x, _ = self.rnn(x)  # (batch_size, seq_len, 2 * hidden_size)

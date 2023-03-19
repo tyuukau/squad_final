@@ -38,7 +38,7 @@ from huggingface_hub import Repository, create_repo
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from utils import torch_from_json, postprocess_qa_predictions
+from utils import postprocess_qa_predictions
 import models
 
 import transformers
@@ -144,12 +144,6 @@ def parse_args():
         type=str,
         help="Path to custom model.",
         required=False,
-    )
-    parser.add_argument(
-        '--bidaf',
-        type=bool,
-        default=False,
-        help='Whether using the bidaf model, make sure to set it to true when using model which containing bidaf layers',
     )
     parser.add_argument(
         '--char_emb_file',
@@ -467,19 +461,17 @@ def main():
         model = AutoModelForQuestionAnswering.from_config(config)
         
     if args.custom_model_name_or_path:
-        if args.bidaf:
-            char_vectors = torch_from_json(args.char_emb_file)
         custom_model_name = args.custom_model_name_or_path
         if custom_model_name == "albert_highway":
-            model = models.AlbertHighway(args.model_name_or_path)
+            model = models.AlbertModelHighway(args.model_name_or_path)
+        elif custom_model_name == 'albert_gru_highway':
+            model = models.AlbertModelGRUHighway(args.model_name_or_path, hidden_size=args.hidden_size, drop_prob=args.drop_prob)
         elif custom_model_name == 'albert_lstm_highway':
             model = models.AlbertModelGRUHighway(args.model_name_or_path, hidden_size=args.hidden_size, drop_prob=args.drop_prob)
-        elif custom_model_name == 'albert_bidaf':
-            model = models.AlbertModelCharGRUAttSelfAttBIDAFOutput(model_name=args.model_name_or_path, char_vectors=char_vectors, hidden_size=args.hidden_size, drop_prob=args.drop_prob)
+        elif custom_model_name == 'albert_bidaf1':
+            model = models.AlbertModelLSTMAttBIDAFOutput(model_name=args.model_name_or_path, hidden_size=args.hidden_size, drop_prob=args.drop_prob)
         elif custom_model_name == 'albert_bidaf2':
-            model = models.AlbertModelCharGRUHighway(model_name=args.model_name_or_path, char_vectors=char_vectors, hidden_size=args.hidden_size, drop_prob=args.drop_prob)
-        elif custom_model_name == 'albert_bidaf3':
-            model = models.AlbertModelCharLSTMAttBIDAFOutput(model_name=args.model_name_or_path, char_vectors=char_vectors, hidden_size=args.hidden_size, drop_prob=args.drop_prob)
+            model = models.AlbertModelGRUAttSelfAttBIDAFOutput(model_name=args.model_name_or_path, hidden_size=args.hidden_size, drop_prob=args.drop_prob)
 
     # Preprocessing the datasets.
     # Preprocessing is slighlty different for training and evaluation.
@@ -1017,10 +1009,13 @@ def main():
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
-        unwrapped_model = accelerator.unwrap_model(model)
-        unwrapped_model.save_pretrained(
-            args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
-        )
+        if not args.custom_model_name_or_path:
+            unwrapped_model = accelerator.unwrap_model(model)
+            unwrapped_model.save_pretrained(
+                args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+            )
+        else:
+            torch.save(model.state_dict(), args.output_dir + 'pytorch_model.bin')
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:

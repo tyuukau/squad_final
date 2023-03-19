@@ -80,11 +80,11 @@ def main(args):
     elif args.model_name == 'albert_lstm_highway':
         model = models.AlbertModelGRUHighway(model_name, hidden_size=args.hidden_size)
     elif args.model_name == 'albert_bidaf':
-        model = models.AlbertModelCharGRUAttSelfAttBIDAFOutput(model_name=model_name, char_vectors=char_vectors, hidden_size=args.hidden_size, drop_prob=args.drop_prob)
+        model = models.AlbertModelGRUAttSelfAttBIDAFOutput(model_name=model_name, char_vectors=char_vectors, hidden_size=args.hidden_size, drop_prob=args.drop_prob)
     elif args.model_name == 'albert_bidaf2':
         model = models.AlbertModelCharGRUHighway(model_name=model_name, char_vectors=char_vectors, hidden_size=args.hidden_size, drop_prob=args.drop_prob)
     elif args.model_name == 'albert_bidaf3':
-        model = models.AlbertModelCharLSTMAttBIDAFOutput(model_name=model_name, char_vectors=char_vectors, hidden_size=args.hidden_size, drop_prob=args.drop_prob)
+        model = models.AlbertModelLSTMAttBIDAFOutput(model_name=model_name, char_vectors=char_vectors, hidden_size=args.hidden_size, drop_prob=args.drop_prob)
     else:
         model = AlbertForQuestionAnswering.from_pretrained(args.model_name)
         
